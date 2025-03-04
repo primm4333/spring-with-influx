@@ -1,15 +1,14 @@
 package com.example.student_management.repository;
 
 import com.influxdb.client.InfluxDBClient;
-import com.influxdb.client.InfluxDBClientFactory;
 import com.influxdb.client.WriteApiBlocking;
 import com.influxdb.client.domain.WritePrecision;
 import com.influxdb.client.write.Point;
-import com.influxdb.query.FluxTable;
 import com.influxdb.client.QueryApi;
+import com.influxdb.query.FluxTable;
+import com.example.student_management.model.Student;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
-import com.example.student_management.model.Student;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -21,27 +20,32 @@ public class StudentRepositoryImpl implements StudentRepository {
     private InfluxDBClient influxDBClient;
 
     private final String bucket = "studentDB";
-    private final String org = "Ashen"; // Replace with your actual InfluxDB org
+    private final String org = "Ashen";
 
     @Override
     public void saveStudent(Student student) {
         WriteApiBlocking writeApi = influxDBClient.getWriteApiBlocking();
-        writeApi.writeMeasurement(bucket, org, com.influxdb.client.domain.WritePrecision.NS, student);
+        writeApi.writeMeasurement(bucket, org, WritePrecision.NS, student);
     }
 
     @Override
     public List<Student> getAllStudents() {
         QueryApi queryApi = influxDBClient.getQueryApi();
-        String fluxQuery = "from(bucket: \"studentDB\") |> range(start: -30d)";
+        String fluxQuery = "from(bucket: \"studentDB\") |> range(start: -7d) |> limit(n: 100)"; // Limit data fetching
 
         List<FluxTable> tables = queryApi.query(fluxQuery, org);
         List<Student> students = new ArrayList<>();
 
         tables.forEach(table -> table.getRecords().forEach(record -> {
             Student student = new Student();
-            student.setsID(record.getValueByKey("sID").toString());
-            student.setName(record.getValueByKey("name").toString());
-            student.setAge(Integer.parseInt(record.getValueByKey("age").toString()));
+            Object idValue = record.getValueByKey("sID");
+            Object nameValue = record.getValueByKey("name");
+            Object ageValue = record.getValueByKey("age");
+
+            if (idValue != null) student.setsID(idValue.toString());
+            if (nameValue != null) student.setName(nameValue.toString());
+            if (ageValue != null) student.setAge(Integer.parseInt(ageValue.toString()));
+
             students.add(student);
         }));
 
@@ -51,7 +55,9 @@ public class StudentRepositoryImpl implements StudentRepository {
     @Override
     public Student getStudentById(String sID) {
         QueryApi queryApi = influxDBClient.getQueryApi();
-        String fluxQuery = String.format("from(bucket: \"studentDB\") |> range(start: -30d) |> filter(fn: (r) => r.sID == \"%s\")", sID);
+        String fluxQuery = String.format(
+                "from(bucket: \"studentDB\") |> range(start: -7d) |> filter(fn: (r) => r[\"sID\"] == \"%s\") |> limit(n: 1)", sID
+        );
 
         List<FluxTable> tables = queryApi.query(fluxQuery, org);
         if (tables.isEmpty()) {
@@ -60,9 +66,13 @@ public class StudentRepositoryImpl implements StudentRepository {
 
         Student student = new Student();
         tables.forEach(table -> table.getRecords().forEach(record -> {
-            student.setsID(record.getValueByKey("sID").toString());
-            student.setName(record.getValueByKey("name").toString());
-            student.setAge(Integer.parseInt(record.getValueByKey("age").toString()));
+            Object idValue = record.getValueByKey("sID");
+            Object nameValue = record.getValueByKey("name");
+            Object ageValue = record.getValueByKey("age");
+
+            if (idValue != null) student.setsID(idValue.toString());
+            if (nameValue != null) student.setName(nameValue.toString());
+            if (ageValue != null) student.setAge(Integer.parseInt(ageValue.toString()));
         }));
 
         return student;
@@ -71,7 +81,6 @@ public class StudentRepositoryImpl implements StudentRepository {
     @Override
     public void deleteStudent(String sID) {
         // InfluxDB 2.x does not support DELETE by query directly.
-        // You need to configure retention policies to remove old data automatically.
         System.out.println("Deletion in InfluxDB 2.x requires retention policy or bucket reorganization.");
     }
 }
